@@ -1,0 +1,233 @@
+#include "msp430f1611.h"                     ; #define controlled include file
+
+        PUBLIC  ID_TECLA
+        PUBLIC  ENV_STRING
+        
+        EXTERN  APT_BUFFER
+        EXTERN  APT_PASS
+        EXTERN  APT_DIG_SEN
+        EXTERN  APT_SEN_IN
+        EXTERN  APT_SEN_COR
+          
+        EXTERN  ENV_DADO
+        EXTERN  ENV_CMD
+        RSEG    CODE
+//_______________________________________________________________________________
+//-------------------------------------------------------------------------------
+;SUBTORINA: ID_TECLA
+;DESCRICAO: Identifica tecla pressionada na matriz e armazena o seu codigo de tecla no
+;buffer de tecla.
+;Entrada: -
+;Saida: codigo de tecla pressionada.
+//-------------------------------------------------------------------------------
+ID_TECLA:
+        PUSH    R10             ;Salvamento de contexto.
+        PUSH    R11             ;Salvamento de contexto.
+        PUSH    R12             ;Salvamento de contexto.
+        
+        MOV.B   P2IFG,R10       ;Salva indentificador de coluna de interrucao. R10:Registro de coluna
+        AND.B   #0x07,R10       ;Mascara das colunas da matriz TECLADO.
+B       MOV.B   #1,R11          ;BIT para P2 para inicio de varredura. R11:Registro de linha.
+
+A       MOV.B   R11,P3OUT       ;Ativa P2 na posicao de R11 p/ varredura.
+        MOV.B   P2IN,R12        ;BIT's para indentificar coluna ativa. R12:Registro p/ id coluna ativa.
+        AND.B   #0x07,R12       ;Mascara das colunas p/ id TECLA em matriz TECLADO.
+        CMP     R12,R10         ;Compara BITS de R12 e R10 para conferir matriz TECLADO.
+        JEQ     loc             ;Loc = Posicao de tecla pressionada encontrada.
+        RLA     R11             ;Alterna para proximo BIT p/ varredura.
+        CMP     #0x10,R11
+        JEQ     B
+        JMP     A
+
+loc     RLA     R10             ;0000 000X - Inicio deslocamento de BIT de coluna.
+        RLA     R10             ;0000 00X0
+        RLA     R10             ;0000 0X00
+        RLA     R10             ;000X 0000 - Fim descolocamento de BIT de coluna.  
+        ADD     R10,R11         ;Cria codigo de tecla pressionada.
+        MOV.B   R11,R14
+
+        POP     R12             ;Restauracao de contexto.
+        POP     R11             ;Restauracao de contexto.
+        POP     R10             ;Restauracao de contexto.
+
+        CALL    #MOV_BUFFER    
+        CALL    #CHECK_SENHA
+return  RET
+//_______________________________________________________________________________
+//-------------------------------------------------------------------------------
+;SUBTORINA: MOV_BUFFER
+;DESCRICAO: Move codigo de tecla pressionada para area em memoria e envia valor
+;para ser mostrado no display.
+;Entrada: Codigo de tecla em R14
+;Saida:   -
+//-------------------------------------------------------------------------------
+MOV_BUFFER:
+        CMP     #0x00,R15     ;Confere se primeiro digito
+        JEQ     init
+        
+cont    MOV.B   R14,0(R10)    ;Move codigo de tecla para posicao em memoria
+        INC     R15           ;Incrementa contador de senha em buffer
+        INC     R10           ;Incrementa apontador de buffer de senha 
+        JMP     fin
+        
+init    MOV.B   #0x01,P5OUT       ;Limpa display para nova digitacao
+        CALL    #ENV_CMD
+        JMP     cont
+
+fin     RET      
+//_______________________________________________________________________________
+//-------------------------------------------------------------------------------
+;SUBTORINA: CHECK_SENHA
+;DESCRICAO: Quando a senha completamente digitada (buffer cheio - 4 digitos)
+;confere se a mesma esta correte comparando com a senha definida na memoria
+;de endereco APT_PASS, e retorna instrucao de SENHA CORRETA, SENHA INCORRETA.
+;Entrada: Buffer de senha, Senha oorreta
+;Saida:   Intrucao de mensagem a ser mostrada no display
+;          3 = SENHA CORRETA
+;          2 = SENHA INCORRETA
+//-------------------------------------------------------------------------------
+CHECK_SENHA:             
+        PUSH    R6              ;Savalamento de contexto.
+        PUSH    R7
+
+        CMP     #0x04,R15       ;Confere se toda senha foi digitada
+        JNZ     fim_tec         
+
+        MOV     #APT_BUFFER,R10     ;Inicoa apontador do buffer
+        MOV     #APT_PASS,R11     ;Inica apontador da senha correta
+
+prox_d  MOV.B   0(R10),R6       ;Move conteudo para futura comparacao
+        MOV.B   0(R11),R7       ;Move conteudo para futura comparacao
+ 
+        CMP     #0x0f,R6        ;Verifica fim de string
+        JEQ     correta      
+              
+        CMP     R6,R7           ;Campara digito da senha
+        JNZ     incorreta       
+        INC     R10             ;Incrementa apontador do buffer
+        INC     R11             ;Incrementa apontador da senha correta
+        JMP     prox_d
+fim_tec CALL    #ENV_TEC  
+
+fim     POP     R7              ;Restauracao de contexto
+        POP     R6
+        RET
+
+correta         MOV     #0x03,R12       ;Codigo para mensagem (3 = SENHA CORRETA)
+                CALL    #ENV_STRING     ;ESCREVE NO DISPLAY "SENHA CORRETA"
+                BIS.B   #0x10,P1OUT     ;Habilidade Led na porta P1
+                CALL    #TEMPO_MSNG     ;DELAY PARA DEMONSTRAR MSNG COM SISTEMA TRAVADO (2 Segundos)
+                CALL    #RESET          ;FUNCAO RESET DE SISTEMA              
+                JMP     fim
+
+incorreta       MOV     #0x02,R12       ;Codigo para mensagem (2 = SENHA INCORRETA)
+                CALL    #ENV_STRING     ;ESCREVE NO DISPLAY "SENHA INCORRETA"
+                BIC.B   #0x10,P1OUT     ;Habilidade Led na porta P1
+                CALL    #TEMPO_MSNG     ;DELAY PARA DEMONSTRAR MSNG COM SISTEMA TRAVADO (2 Segundos)
+                CALL    #RESET          ;FUNCAO RESET DE SISTEMA
+                JMP     fim      
+//_______________________________________________________________________________ 
+//-------------------------------------------------------------------------------
+;SUBTORINA: ENVIA_TEC
+;DESCRICAO: Envia caracter "*" para cada digito de senha ja digitado
+//-------------------------------------------------------------------------------
+ENV_TEC:
+        MOV.B   #0x2A,R13       ;Define caracter a ser escrito em display "*"
+        CALL    #ENV_DADO       ;Chama rotina de esrita em display
+            
+        RET   
+//_______________________________________________________________________________ 
+//-------------------------------------------------------------------------------
+;SUBTORINA: ENV_STRING
+;DESCRICAO: Envia caracter por caracter para escrita em display da string.
+;Entrada: Codigo de mensagem de R12
+;Saida:   -
+//-------------------------------------------------------------------------------
+ENV_STRING:
+        PUSH    R8              ;Salvamento de contexto
+        PUSH    R13
+
+        MOV.B   #0x01,P5OUT     ;Limpa display para nova digita��o
+        CALL    #ENV_CMD
+
+        CMP     #0x01,R12       ;Identifica se a string "DIGITE SENHA" deve ser enviada
+        JEQ     String1         
+        CMP     #0x02,R12       ;Identifica se a string "SENHA INCORRETA" deve ser enviada
+        JEQ     String2
+        MOV     #APT_SEN_COR,R8      ;"SENHA CORRETA" deve ser enviada
+
+inicio  MOV.B   0(R8),R13
+        CMP     #0x0F,R13        ;Verifica fim da String
+        JEQ     fim_envio
+        CALL    #ENV_DADO
+        INC     R8              ;Incrementa apontador de String
+        JMP     inicio
+
+
+fim_envio       POP      R13    ;Restaura contexto
+                POP      R8
+                RET      
+
+
+String1         MOV     #APT_DIG_SEN,R8       ;Define apontador de string 1
+                JMP     inicio
+
+String2         MOV     #APT_SEN_IN,R8       ;Define apontador de string 2
+                JMP     inicio
+//_______________________________________________________________________________
+
+//-------------------------------------------------------------------------------
+;Subrotina: TEMPO_MSNG
+;Descricao: Intervalo de tempo gasto pela CPU com tempo base de 1ms
+//-------------------------------------------------------------------------------
+W EQU 250
+TEMPO_MSNG:                      ; ciclos de instrucao
+      PUSH      R5               ; 3
+      PUSH      R6               ; 3
+      MOV       #4000,R5
+cont_ext
+      MOV       #W,R6            ; 2
+cont_int
+      DEC       R6               ; 1
+      JNZ       cont_int         ; 2
+      DEC       R5               ; 1
+      JNZ       cont_ext         ; 2
+      POP       R6               ; 2
+      POP       R5               ; 2
+      RET                        ; 3
+//_______________________________________________________________________________
+//-------------------------------------------------------------------------------
+;SUBTORINA: RESET
+;DESCRICAO: RESETA TODO SISTEMA - BUFFER E ESCREVE MENSAGEM "DIGETE SENHA"
+//-------------------------------------------------------------------------------
+RESET:
+        PUSH    R7
+
+        MOV     #APT_BUFFER,    R10         ;APT_BPASS
+        MOV     #APT_PASS,    R11         ;APT_PASS
+        MOV     #0x0220,    R12         ;APT_KEYCODE
+
+        PUSH    R10    
+
+clear   MOV.B   0(R10),R7               ;Move conteudo de buffer para registro
+        CMP     #0x0F,R7                ;Verifica se o conteudo = 0Fh (fim de vetor)
+        JEQ     reset_completo
+        MOV.B   #0x00,0(R10)            ;Zera posicao de memoria.
+        INC     R10                     ;Incrementa apontador de buffer.
+        JMP     clear
+
+reset_completo          MOV     #0,R15          ;Zera contador de digitos no buffer
+                        MOV.B   #0x01,R13       ;Limpa display para nova digitacaoo
+                        CALL    #ENV_DADO
+                        MOV.B   #0x01,R12       ;Comando para escrever "DIGETE SENHA" no display
+                        BIC.B   #0x01,P1OUT     ;Reinicializa Led na porta P1 (desligado)
+                        CALL    #ENV_STRING
+
+         POP     R10
+         POP     R7
+
+         RET
+//_______________________________________________________________________________
+
+    END
+

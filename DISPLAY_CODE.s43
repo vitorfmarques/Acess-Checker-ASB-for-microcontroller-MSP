@@ -1,0 +1,55 @@
+#include "msp430f1611.h"                     ; #define controlled include file
+
+        PUBLIC  ENV_CMD
+        PUBLIC  ENV_DADO
+        RSEG    CODE
+
+//_______________________________________________________________________________
+//-------------------------------------------------------------------------------
+;RORINA: ENV_CDM
+;DESCRICAO: Instrução de comanda para sistema do display.
+//-------------------------------------------------------------------------------
+ENV_CMD:
+    BIC.B   #0x80,P3OUT         ;RS = 0
+    BIC.B   #0x40,P3OUT         ;E  = 0
+    CALL    #DELAY_DISPLAY      
+    BIS.B   #0x40,P3OUT         ;E  = 1
+    CALL    #DELAY_DISPLAY     
+    BIC.B   #0x40,P3OUT         ;E  = 0
+
+    RET
+//_______________________________________________________________________________
+//-------------------------------------------------------------------------------
+;RORINA: ENV_DADO
+;DESCRICAO: Instrução de comando para escrita do display..
+//-------------------------------------------------------------------------------
+ENV_DADO:
+    MOV.B   R13,P5OUT           ;Dado --> Barramento de dados P5
+
+    BIS.B   #0x80,P3OUT         ;RS = 1
+    BIC.B   #0x40,P3OUT         ;E  = 0
+    CALL    #DELAY_DISPLAY
+    BIS.B   #0x40,P3OUT         ;E  = 1  
+    CALL    #DELAY_DISPLAY
+    BIC.B   #0x40,P3OUT         ;E  = 0
+
+    RET
+//_______________________________________________________________________________
+//-------------------------------------------------------------------------------
+;RORINA: DELAY_DISPLAY
+;DESCRICAO: Delay entre intruções p/ display.
+//-------------------------------------------------------------------------------
+DELAY_DISPLAY:
+        PUSH    R4
+        MOV     #0x400,R4
+T_D     CMP     #0x00,R4
+        JEQ     time_end
+        DEC     R4
+        JMP     T_D
+
+time_end            POP  R4
+                    RET
+//_______________________________________________________________________________
+
+        END
+        

@@ -1,0 +1,71 @@
+#include "msp430f1611.h"                     ; #define controlled include file
+
+        PUBLIC  CONFIG
+        EXTERN  ENV_CMD
+        EXTERN  ENV_STRING
+        RSEG    CODE
+        
+CONFIG:    
+//_______________________________________________________________________________
+//-------------------------------------------------------------------------------
+;ROTINA: CONFIG_LCD
+;DESCRICAO: Configura Display
+//-------------------------------------------------------------------------------
+CONFIG_LCD:
+    PUSH    R4
+;----------------------------------CONFIG I/O LCD--------------------------------
+
+    BIS.B   #0xC0,P3DIR         ;Configura RS,"R/W" e E (R/W ja aterrado)
+    BIS.B   #0xFF,P5DIR         ;Configura pinos de envio de dados (D0 D7)
+
+;----------------------------------PROGRAMA LCD----------------------------------
+
+    MOV     #0x38,R4            ;Define: numero de linhas, numero de bits do barramento e formato do caracter
+    MOV.B   R4,P5OUT            ;Codigo --> Barramento P5
+    CALL    #ENV_CMD
+
+    MOV     #0x0E,R4            ;Display e cursos ativos sem piscar
+    MOV.B   R4,P5OUT            ;Codigo --> Barramento P5
+    CALL    #ENV_CMD
+
+    MOV     #0x06,R4            ;Definido deslocamento de cursos para direita
+    MOV.B   R4,P5OUT            ;Codigo --> Barramento P5
+    CALL    #ENV_CMD
+
+    MOV     #0x01,R4            ;Limpa display
+    MOV.B   R4,P5OUT            ;Codigo --> Barramento P5
+    CALL    #ENV_CMD
+    
+    MOV.B   #0x01,R12           ;Comando para escrever "DIGETE SENHA" no display
+    CALL    #ENV_STRING         ;Chamada de função de escrita de menssagem.
+
+;--------------------------------------------------------------------------------
+    POP     R4
+//_______________________________________________________________________________
+//-------------------------------------------------------------------------------
+;ROTINA: CNF_LED
+;DESCRICAO: Configura saida do LED p/ indicacao de operacao do sistema.
+//-------------------------------------------------------------------------------
+CNF_LED:
+        MOV.B   #0x10,P1DIR     ;Habilita P1.4 como saida (LED)
+        BIC.B   #0x10,P1OUT     ;Inicializa LED desativado
+//_______________________________________________________________________________
+//-------------------------------------------------------------------------------
+;RORINA: CNF_TECLADO
+;DESCRICAO: Faz configuracao de I/O do teclado, interrucao, arma matriz e habilita.
+//-------------------------------------------------------------------------------
+CNF_TECLADO:
+        BIC.B   #0x07,P2DIR     ;Define como entrada P2.0 a P2.2
+        BIS.B   #0x0F,P3DIR     ;Define como saida P3.0 a P3.3
+        BIC.B   #0x07,P2IES     ;Estabele interrupcao por borda de subida em P2.0 a P2.2
+        BIS.B   #0x07,P2IE      ;Habilita interrupcao em P2.0 a P2.2
+        BIS.B   #0x0F,P3OUT     ;Ativa linhas da matriz em P3. P3.0 a P3.3.
+        EINT                    ;*****HABILITA INTERRUPCAO GERAL******
+
+        MOV.B   #0x00,R15       ;ZERA CONTADOR DE BUFFER DE SENHA
+//_______________________________________________________________________________
+
+        RET
+        
+        END
+       
